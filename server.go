@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"github.com/valyala/fasthttp"
+	"exercise/httpclient"
 );
 
 const discovrHost string = "https://epic.gsfc.nasa.gov";
@@ -11,7 +12,7 @@ const discovrAvailableDates string = "/api/natural/all"
 const discovrDate string = discovrHost + "/api/natural/YYYY/MM/DD";
 
 //TODO(Dylan): replace this with an actual cache 
-//var discovrAvailableDatesCache []byte;
+var discovrAvailableDatesCache []byte;
 //var discovrLatestDateCache []byte;
 var renderedHTMLCache []byte;
 
@@ -19,7 +20,15 @@ var renderedHTMLCache []byte;
 //Note(Dylan): this can be a goroutine that gets called periodically. Though we do actually want this to block in the case that the cache is empty when we get a GET request.
 func FetchRenderAndCache() {
 
-	//TODO(Dylan): request and cache discovrAvailableDates. The data will change once per day, so we can hold it in the memcache for a really long time.
+	//NOTE(Dylan): request and cache discovrAvailableDates. The data will change once per day, so we can hold it in the memcache for a really long time.
+	discovrAvailableDatesBytes, contentType, status, geterr := httpclient.GetBytes(discovrAvailableDates, 3000);
+	
+	if(geterr != nil && status == 200 && contentType == "application/json") {
+		discovrAvailableDatesCache = discovrAvailableDatesBytes;
+		log.Printf("%s",discovrAvailableDatesCache);
+	}
+	
+	//TODO(Dylan): parse the available dates JSON and figure out what the most recent available date is.
 	
 	//TODO(Dylan): request and cache the detailed discovrData for the latest date
 

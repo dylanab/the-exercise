@@ -1,3 +1,3 @@
-module the-exercise
+module exercise
 
 go 1.15
