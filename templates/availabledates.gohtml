@@ -1,0 +1,14 @@
+{{ define "availabilitypage"}}
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>DISCOVR Blue Marble Images</title>
+	</head>
+	<body>
+		<p>Blue Marble images from the Deep Space Climate Observatory are available for these dates:</p>
+		{{ range .}}
+			<p><a href="/date/{{.Date}}">{{ .Date }}</a></p>
+		{{ end }}
+	</body>
+</html> 
+{{ end }}

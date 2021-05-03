@@ -1,0 +1,19 @@
+{{ define "datepage"}}
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>DISCOVR Blue Marble Images</title>
+	</head>
+	<body>
+		<p>These are images of Earth taken by NASA's Deep Space Climate Observatory (DISCOVR) from its position at the Earth-Sun L1 point.</p>
+		{{ range .}}
+			<div class="earthimage_container">
+				<img class="earthimage" src="https://epic.gsfc.nasa.gov/archive/natural/{{.YYYY}}/{{.MM}}/{{.DD}}/png/{{ .Url }}.png" width="400" height="400">
+				<div class="earthimage_text_container">
+					<p> image captured at {{ .Timestamp }}</p>
+				</div>
+			</div>
+		{{ end }}
+	</body>
+</html> 
+{{ end }}

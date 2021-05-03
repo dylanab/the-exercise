@@ -25,8 +25,8 @@ func sendReq(url, method string,
 
 	err := fasthttp.DoTimeout(request, response, timeout);
 
-	log.Printf("request: %+v\n", request);
-	log.Printf("response: %+v\n", response);
+	//log.Printf("request: %+v\n", request);
+	//log.Printf("response: %+v\n", response);
 
 	if(err != nil) {
 		log.Printf("httpclient :: error during %s request to %s :: %v", method, url, err);

@@ -3,59 +3,189 @@ package main;
 import (
 	"fmt"
 	"log"
+	"strings"
+	"encoding/json"
+	"html/template"
 	"github.com/valyala/fasthttp"
 	"exercise/httpclient"
+	"exercise/cache"
 );
 
+const port string = ":8080";
 const discovrHost string = "https://epic.gsfc.nasa.gov";
-const discovrAvailableDates string = "/api/natural/all"
-const discovrDate string = discovrHost + "/api/natural/YYYY/MM/DD";
+const discovrAvailableDates string = discovrHost + "/api/natural/all"
+const discovrDate string = discovrHost + "/api/natural/date/";
 
-//TODO(Dylan): replace this with an actual cache 
-var discovrAvailableDatesCache []byte;
-//var discovrLatestDateCache []byte;
-var renderedHTMLCache []byte;
+var c *cache.Cache;
+var cErr error;
 
-//Note(Dylan): probably break these processes out into different functions and/or different packages
-//Note(Dylan): this can be a goroutine that gets called periodically. Though we do actually want this to block in the case that the cache is empty when we get a GET request.
-func FetchRenderAndCache() {
+var availabilityTemplate *template.Template;
+var atErr error;
+var datePageTemplate *template.Template;
+var dtErr error;
 
-	//NOTE(Dylan): request and cache discovrAvailableDates. The data will change once per day, so we can hold it in the memcache for a really long time.
-	discovrAvailableDatesBytes, contentType, status, geterr := httpclient.GetBytes(discovrAvailableDates, 3000);
-	
-	if(geterr != nil && status == 200 && contentType == "application/json") {
-		discovrAvailableDatesCache = discovrAvailableDatesBytes;
-		log.Printf("%s",discovrAvailableDatesCache);
-	}
-	
-	//TODO(Dylan): parse the available dates JSON and figure out what the most recent available date is.
-	
-	//TODO(Dylan): request and cache the detailed discovrData for the latest date
-
-	//TODO(Dylan): parse the discovrData into some go structs that will help us render the HTML
-
-	//TODO(Dylan): render some html and store it in the cache
+type DiscovrAvailability struct {
+    Date string `json:"date"`;
 }
 
-func main() {
+type DiscovrImage struct {
+	Url string `json:"image"`;
+	Timestamp string `json:"date"`;
+	YYYY, MM, DD string;
+}
+
+func RenderAvailabilityPage(ctx *fasthttp.RequestCtx, c *cache.Cache) {
+	//NOTE(Dylan): check if the availiability html is in the cache, if it hasn't or it's expired, then we need to pull the data from the DISCOVR api and render it into HTML. 
+	var discovrAvailability []DiscovrAvailability;
+	var getErr error;
+	availableDatesBytes, isExpired := c.GetItem("availability");
 	
-	//NOTE(Dylan): initialize the cache
-	renderedHTMLCache := []byte("");
-
-	//TODO(Dylan): Before the server starts up, request the discovrLatest data and fill the cache.
-	FetchRenderAndCache();
-
-	server := func(ctx *fasthttp.RequestCtx) {
-		//TODO(Dylan): if the cache is empty or expired, preform the FetchRenderandCache procedure synchronously
-		ctx.Response.Header.Set("Content-Type", "text/plain");
-		ctx.Response.SetBody(renderedHTMLCache);
+	if(isExpired) {
+		log.Printf("getting availableDatesBytes");
+		availableDatesBytes, _, _, getErr = httpclient.GetBytes(discovrAvailableDates, 3000);
+		if(getErr != nil) {
+			log.Printf("%s", getErr);
+			return;	
+		}	
+		c.AddItem("availability", availableDatesBytes);
 	}
 
-	err := fasthttp.ListenAndServe(":8080", server);
+	
+	//log.Printf("%s", availableDatesBytes);
+	jErr := json.Unmarshal(availableDatesBytes, &discovrAvailability);
+
+	if(jErr != nil) {		
+		jErrMsg := fmt.Sprintf("Error during availability page json unmarshal %s", jErr);
+		log.Print(jErrMsg);
+		ctx.Error(jErrMsg, fasthttp.StatusInternalServerError);
+		return;
+	}
+
+	//log.Printf("unmarshalled availability json: %+v", discovrAvailability);
+
+	log.Printf("attempting to execute availabilitypage template");
+	tErr := availabilityTemplate.ExecuteTemplate(ctx, "availabilitypage", discovrAvailability);
+
+	if(tErr != nil) {
+		tErrMsg := fmt.Sprintf("Error during availability page template render %s", tErr);
+		log.Print(tErrMsg);
+		ctx.Error(tErrMsg, fasthttp.StatusInternalServerError);
+		return;
+	}
+
+	ctx.SetContentType("text/html");
+	ctx.SetStatusCode(fasthttp.StatusOK);
+}
+
+func RenderDatePage(ctx *fasthttp.RequestCtx, datestring string, c *cache.Cache) {
+
+	var discovrDateImages []DiscovrImage;
+	var getErr error;
+	dateBytes, isExpired := c.GetItem(datestring);
+	
+	var YYYY string = "";
+	var MM string = "";
+	var DD string = "";
+
+	dateStringSplit := strings.Split(datestring, "-");
+	if(len(dateStringSplit) == 3) {
+		YYYY = dateStringSplit[0];
+		MM = dateStringSplit[1];
+		DD = dateStringSplit[2];
+	}
+	
+	log.Printf("YYYY: %s, MM: %s, DD: %s", YYYY, MM, DD);
+
+	if(isExpired) {
+		dateBytes, _, _, getErr = httpclient.GetBytes(discovrDate + datestring, 3000);
+		if(getErr != nil) {
+			log.Printf("%s", getErr);
+			return;	
+		}	
+		c.AddItem(datestring, dateBytes);
+	}
+
+	//log.Printf("%s", dateBytes);
+	jErr := json.Unmarshal(dateBytes, &discovrDateImages);
+
+	for i := range(discovrDateImages) {
+		image := &discovrDateImages[i];
+		image.YYYY = YYYY;
+		image.MM = MM;
+		image.DD = DD;
+	}
+
+	log.Printf("%+v", discovrDateImages[0]);
+
+	if(jErr != nil) {		
+		jErrMsg := fmt.Sprintf("Error during date page json unmarshal %s", jErr);
+		log.Print(jErrMsg);
+		ctx.Error(jErrMsg, fasthttp.StatusInternalServerError);
+		return;
+	}
+
+	tErr := datePageTemplate.ExecuteTemplate(ctx, "datepage", discovrDateImages);
+	
+	if(tErr != nil) {
+		tErrMsg := fmt.Sprintf("Error during date page template render %s", tErr);
+		log.Print(tErrMsg);
+		ctx.Error(tErrMsg, fasthttp.StatusInternalServerError);
+		return;
+	}
+    
+	ctx.SetContentType("text/html");
+	ctx.SetStatusCode(fasthttp.StatusOK);
+}
+
+
+func main() {
+
+	startErrMessage := "the exercise server failed to start";
+
+	c, cErr = cache.Create("120s", true);
+	
+	if(cErr != nil) {
+		log.Fatalf(startErrMessage + " with error  %s", cErr);
+	}
+
+	availabilityTemplate, atErr = template.ParseFiles("templates/availabledates.gohtml");
+	datePageTemplate, dtErr = template.ParseFiles("templates/datepage.gohtml");
+
+	if(atErr != nil) {
+		log.Fatalf(startErrMessage + " with error  %s", atErr);
+	}
+
+	if(dtErr != nil) {
+		log.Fatalf(startErrMessage + " with error  %s", dtErr);
+	}
+		
+	server := func(ctx *fasthttp.RequestCtx) {
+		if(ctx.IsGet()) {
+			path := string(ctx.Path());
+			log.Printf("request path: %s", path);
+			pathElements := strings.Split(path, "/")[1:];
+			elementCount := len(pathElements);
+
+			switch {
+			case elementCount == 2 && pathElements[0] == "date":
+				datestring := pathElements[1];
+				log.Printf("getting data for date %s", datestring);
+				RenderDatePage(ctx, datestring, c);
+			case elementCount == 1 && pathElements[0] == "":
+				log.Printf("getting availability page");
+				RenderAvailabilityPage(ctx, c);
+			default:
+				log.Printf("invalid path requested:  %s", path);
+				ctx.Error("requested path is invalid", fasthttp.StatusNotFound);
+			}
+		}
+	}
+
+	log.Printf("Starting the exercise server on port %s", port);
+	err := fasthttp.ListenAndServe(port, server);
 	exitMessage := "exercise server has stopped";
 	if err != nil {
 		exitMessage = fmt.Sprintf("%s with error: %s", exitMessage, err);
 	}
 	log.Fatalf("%s", exitMessage);
 }
-
