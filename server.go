@@ -51,7 +51,6 @@ func RenderAvailabilityPage(ctx *fasthttp.RequestCtx, c *cache.Cache) {
 	}
 
 	
-	//log.Printf("%s", availableDatesBytes);
 	jErr := json.Unmarshal(availableDatesBytes, &discovrAvailability);
 
 	if(jErr != nil) {		
@@ -60,8 +59,6 @@ func RenderAvailabilityPage(ctx *fasthttp.RequestCtx, c *cache.Cache) {
 		ctx.Error(jErrMsg, fasthttp.StatusInternalServerError);
 		return;
 	}
-
-	//log.Printf("unmarshalled availability json: %+v", discovrAvailability);
 
 	log.Printf("attempting to execute availabilitypage template");
 	tErr := availabilityTemplate.ExecuteTemplate(ctx, "availabilitypage", discovrAvailability);
@@ -93,8 +90,6 @@ func RenderDatePage(ctx *fasthttp.RequestCtx, datestring string, c *cache.Cache)
 		MM = dateStringSplit[1];
 		DD = dateStringSplit[2];
 	}
-	
-	log.Printf("YYYY: %s, MM: %s, DD: %s", YYYY, MM, DD);
 
 	if(isExpired) {
 		dateBytes, _, _, getErr = httpclient.GetBytes(discovrDate + datestring, 3000);
@@ -105,7 +100,6 @@ func RenderDatePage(ctx *fasthttp.RequestCtx, datestring string, c *cache.Cache)
 		c.AddItem(datestring, dateBytes);
 	}
 
-	//log.Printf("%s", dateBytes);
 	jErr := json.Unmarshal(dateBytes, &discovrDateImages);
 
 	for i := range(discovrDateImages) {
@@ -114,8 +108,6 @@ func RenderDatePage(ctx *fasthttp.RequestCtx, datestring string, c *cache.Cache)
 		image.MM = MM;
 		image.DD = DD;
 	}
-
-	log.Printf("%+v", discovrDateImages[0]);
 
 	if(jErr != nil) {		
 		jErrMsg := fmt.Sprintf("Error during date page json unmarshal %s", jErr);
